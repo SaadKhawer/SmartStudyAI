@@ -1,0 +1,59 @@
+# docker-compose.yml
+# Run everything with: docker compose up
+
+version: '3.8'
+
+services:
+  # ─── MongoDB ──────────────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: studyai-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: studyai
+
+  # ─── Backend (Express + RAG) ──────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: studyai-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mongo
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGODB_URI: mongodb://mongo:27017/studyai
+      JWT_SECRET: ${JWT_SECRET}
+      GROK_API_KEY: ${GROK_API_KEY}
+      GROK_MODEL: ${GROK_MODEL:-llama-3.3-70b-versatile}
+      HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/vector_stores:/app/vector_stores
+      - ./backend/logs:/app/logs
+
+  # ─── Frontend (React) ─────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:5000/api}
+    container_name: studyai-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
